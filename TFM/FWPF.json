@@ -1,0 +1,167 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pfsense-logs",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -128,
+        240
+      ],
+      "id": "01b06724-1dec-42c8-aca4-4cddbb9d6189",
+      "name": "Webhook",
+      "webhookId": "5786d7f1-c585-4235-a0a4-f6dd00a05c9a"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analiza este log: {{ $json.body.mensaje }}\n\nTAREA: Identifica ÚNICAMENTE la IP del atacante (la que NO es el pfSense).\nREGLA DE ORO: Responde SOLO con esa IP. Un solo dato, sin saltos de línea, sin explicaciones. Ejemplo: 192.168.0.18",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9f9dcf90-867c-4271-bb4d-7d9631f7a4eb",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        48,
+        240
+      ],
+      "id": "d45c9c4c-791b-4051-bd57-a1feab38d2fe",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "v4IaDkjZp3HNn5WF",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "=easyrule block wan {{ $json.text }} && pfctl -k {{ $json.text }}"
+      },
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        432,
+        240
+      ],
+      "id": "f613655d-467b-40cc-a9ee-fbd341a65f0d",
+      "name": "Execute a command",
+      "credentials": {
+        "sshPassword": {
+          "id": "dqQgDv8UBteRYPWV",
+          "name": "SSH Password account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d8a0eec2-9e4a-4662-b172-931f745ab53a",
+              "leftValue": "{{ $json.text }}",
+              "rightValue": "CLEAN",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        240,
+        368
+      ],
+      "id": "e9434149-5916-48be-92bf-3e8cf70e8cbf",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Execute a command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "43d95990-872d-4741-a02f-be5ca4ac009e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8eb8abc41e2c7d1a740f41523d31b75efb1022de203f86dda3a310092891d74b"
+  },
+  "id": "ST3csC5NjebatMwj",
+  "tags": []
+}
