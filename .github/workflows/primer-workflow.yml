@@ -1,0 +1,17 @@
+name: Lab 1 - Workflow Básico
+
+# 1. Ejecución en cualquier push
+on: push
+
+jobs:
+  ejecucion-basica:
+    # 2. Restricción: ubuntu-latest
+    runs-on: ubuntu-latest
+
+    # 3. Al menos 2 steps sin actions externas
+    steps:
+      - name: Imprimir mensaje
+        run: echo "¡Hola! Este es mi primer workflow del Lab 1 creado desde la web."
+
+      - name: Listar contenido del directorio
+        run: ls -la
