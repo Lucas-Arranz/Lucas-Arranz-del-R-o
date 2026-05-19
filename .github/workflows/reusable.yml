@@ -1,26 +1,59 @@
-name: Consumidor de Pipeline Node
+name: Reusable Node Pipeline
 
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch: # Permite ejecución manual
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Versión de Node.js a utilizar'
+        required: true
+        type: string
+    outputs:
+      artifact-name:
+        description: 'Nombre del artifact generado'
+        value: ${{ jobs.build-and-test.outputs.artifact_name }}
 
 jobs:
-  call-reusable-node-18:
-    uses: ./.github/workflows/reusable.yml
-    with:
-      node-version: '18.x'
-
-  call-reusable-node-20:
-    uses: ./.github/workflows/reusable.yml
-    with:
-      node-version: '20.x'
-
-  post-process:
-    needs: call-reusable-node-20
+  build-and-test:
     runs-on: ubuntu-latest
+    outputs:
+      artifact_name: result-${{ inputs.node-version }}
+    
     steps:
-      - name: Lógica adicional propia
+      - name: Checkout del código
+        uses: actions/checkout@v4.1.1
+
+      - name: Configurar Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4.0.2
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Configurar Cache de NPM
+        uses: actions/cache@v4.0.2
+        id: npm-cache
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('lab-pipelines/**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Instalar dependencias
+        working-directory: ./lab-pipelines
+        run: npm ci
+
+      - name: Ejecutar Tests y Build
+        working-directory: ./lab-pipelines
         run: |
-          echo "El workflow reutilizable finalizó correctamente."
-          echo "El artifact generado se llama: ${{ needs.call-reusable-node-20.outputs.artifact-name }}"
+          mkdir -p build reports logs
+          echo "Build compilado con Node ${{ inputs.node-version }}" > build/output.txt
+          echo "Tests pasados OK" > reports/test-report.txt
+          echo "Log de ejecución" > logs/run.log
+
+      - name: Subir Artifacts
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          name: result-${{ inputs.node-version }}
+          path: |
+            lab-pipelines/build/
+            lab-pipelines/reports/
+            lab-pipelines/logs/
+          retention-days: 5
