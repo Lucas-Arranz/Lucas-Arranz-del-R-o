@@ -1,60 +1,26 @@
-name: Reusable Node Pipeline
+name: Consumidor de Pipeline Node
 
 on:
-  workflow_call:
-    inputs:
-      node-version:
-        description: 'Versión de Node.js a utilizar'
-        required: true
-        type: string
-    outputs:
-      artifact-name:
-        description: 'Nombre del artifact generado'
-        value: ${{ jobs.build-and-test.outputs.artifact_name }}
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: 
 
 jobs:
-  build-and-test:
+  call-reusable-node-18:
+    uses: ./.github/workflows/reusable.yml
+    with:
+      node-version: '18.x'
+
+  call-reusable-node-20:
+    uses: ./.github/workflows/reusable.yml
+    with:
+      node-version: '20.x'
+
+  post-process:
+    needs: call-reusable-node-20
     runs-on: ubuntu-latest
-    outputs:
-      artifact_name: result-${{ inputs.node-version }}
-    
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4.1.1 # Versión fijada por seguridad
-
-      - name: Configurar Node.js ${{ inputs.node-version }}
-        uses: actions/setup-node@v4.0.2
-        with:
-          node-version: ${{ inputs.node-version }}
-
-      - name: Configurar Cache de NPM
-        uses: actions/cache@v4.0.2
-        id: npm-cache
-        with:
-          path: ~/.npm
-          # Cache dependiente del SO y del hash del lockfile para evitar colisiones
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Instalar dependencias
-        run: npm ci
-
-      - name: Ejecutar Tests y Build (Simulados si no tienes scripts)
+      - name: Lógica adicional propia
         run: |
-          mkdir -p build reports logs
-          echo "Build compilado con Node ${{ inputs.node-version }}" > build/output.txt
-          echo "Tests pasados OK" > reports/test-report.txt
-          echo "Log de ejecución" > logs/run.log
-          # npm run build  # Descomentar si tu proyecto tiene build real
-          # npm test       # Descomentar si tu proyecto tiene tests reales
-
-      - name: Subir Artifacts
-        uses: actions/upload-artifact@v4.3.1
-        with:
-          name: result-${{ inputs.node-version }}
-          path: |
-            build/
-            reports/
-            logs/
-          retention-days: 5 # Retención personalizada
+          echo "El workflow reutilizable finalizó correctamente."
+          echo "El artifact generado se llama: ${{ needs.call-reusable-node-20.outputs.artifact-name }}"
