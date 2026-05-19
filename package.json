@@ -1,9 +1,0 @@
-{
-  "name": "mi-proyecto-node",
-  "version": "1.0.0",
-  "description": "Proyecto para laboratorio de GitHub Actions",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Simulando tests OK\" && exit 0"
-  }
-}
