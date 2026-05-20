@@ -1,0 +1,6 @@
+# .gitignore
+# Exclude portable Git and temporary backup files
+mingit/
+*.bak
+temp_extracted_docx/
+temp_document.zip
