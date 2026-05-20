@@ -33,12 +33,41 @@ if (Test-Path $tempZip) {
 Copy-Item $originalDoc -Destination $tempZip -Force
 Expand-Archive -Path $tempZip -DestinationPath $tempExtractDir -Force
 
-# Step 4: Load and modify the document XML
+# Step 4: Fix corrupted characters in the raw XML text first!
 $xmlPath = Join-Path $tempExtractDir "word\document.xml"
-Write-Output "Loading word/document.xml..."
+Write-Output "Fixing encoding/corrupted characters in word/document.xml..."
+$xmlText = [System.IO.File]::ReadAllText($xmlPath)
+
+# Replacements to fix pre-existing corrupted characters in the template
+$replacements = @{
+    "DespuǸs" = "Despu" + [char]0x00E9 + "s"
+    "Da 4" = "D" + [char]0x00ED + "a 4"
+    "mǧltiples" = "m" + [char]0x00FA + "ltiples"
+    "Aadir" = "A" + [char]0x00F1 + "adir"
+    "Configuracin" = "Configuraci" + [char]0x00F3 + "n"
+    "produccin" = "producci" + [char]0x00F3 + "n"
+    "especficas" = "espec" + [char]0x00ED + "ficas"
+    "Acumulacin" = "Acumulaci" + [char]0x00F3 + "n"
+    "Informacin" = "Informaci" + [char]0x00F3 + "n"
+    "expansin" = "expansi" + [char]0x00F3 + "n"
+    "dinǭmicamente" = "din" + [char]0x00E1 + "micamente"
+    "Explicacin" = "Explicaci" + [char]0x00F3 + "n"
+    "nǧmero" = "n" + [char]0x00FA + "mero"
+    "dinǭmicas" = "din" + [char]0x00E1 + "micas"
+}
+
+foreach ($key in $replacements.Keys) {
+    $xmlText = $xmlText.Replace($key, $replacements[$key])
+}
+
+# Save fixed text back
+[System.IO.File]::WriteAllText($xmlPath, $xmlText, [System.Text.Encoding]::UTF8)
+
+# Step 5: Load XML object to insert headers and appends
+Write-Output "Loading word/document.xml into XML parser..."
 [xml]$doc = Get-Content -Path $xmlPath -Raw
 
-# Helper to create a paragraph with OpenXML namespaces
+# Helper to create a paragraph with OpenXML namespaces and proper styling
 function New-WordParagraph {
     param(
         [string]$Text,
@@ -116,72 +145,85 @@ function Append-Element {
     }
 }
 
-# Injecting Document Sections
+# 1. Place a beautiful student header block at the VERY TOP of the body
+$firstChild = $body.FirstChild
+Write-Output "Injecting Student Header at the top of the body..."
+
+# Insert empty paragraph and a clean horizontal header
+$body.InsertBefore((New-WordParagraph ("----------------------------------------------------------------------") -Bold $true -Color "1F4E78"), $firstChild) | Out-Null
+$body.InsertBefore((New-WordParagraph ("ESTUDIANTE: Lucas Arranz del R" + [char]0x00ED + "o") -Bold $true -Color "1F4E78"), $firstChild) | Out-Null
+$body.InsertBefore((New-WordParagraph ("LABORATORIO: Laboratorio 3 - Matrix Build Enterprise") -Bold $true -Color "1F4E78"), $firstChild) | Out-Null
+$body.InsertBefore((New-WordParagraph ("FECHA: " + (Get-Date -Format "dd/MM/yyyy")) -Bold $true -Color "1F4E78"), $firstChild) | Out-Null
+$body.InsertBefore((New-WordParagraph ("----------------------------------------------------------------------") -Bold $true -Color "1F4E78"), $firstChild) | Out-Null
+$body.InsertBefore((New-WordParagraph ""), $firstChild) | Out-Null
+
+# 2. Injecting Appended Document Sections with proper Spanish accents using unicode characters
+Write-Output "Injecting appended documentation at the end of the body..."
 Append-Element (New-WordParagraph "" -Style "Normal")
 Append-Element (New-WordParagraph "----------------------------------------" -Bold $true)
-Append-Element (New-WordParagraph "RESOLUCION Y DOCUMENTACION DEL LABORATORIO" -Bold $true -Color "1F4E78")
+Append-Element (New-WordParagraph ("RESOLUCI" + [char]0x00D3 + "N Y DOCUMENTACI" + [char]0x00D3 + "N DEL LABORATORIO") -Bold $true -Color "1F4E78")
 Append-Element (New-WordParagraph "" -Style "Normal")
 
 # SECTION 1
-Append-Element (New-WordParagraph "1. Diseno de la Matriz y Calculo del Numero de Jobs" -Bold $true -Color "2E75B6")
-Append-Element (New-WordParagraph "La estrategia 'strategy/matrix' permite definir combinaciones dinamicas de ejecucion para validar multiples entornos. En este pipeline, configuramos los siguientes parametros:" -Italic $true)
+Append-Element (New-WordParagraph ("1. Dise" + [char]0x00F1 + "o de la Matriz y C" + [char]0x00E1 + "lculo del N" + [char]0x00FA + "mero de Jobs") -Bold $true -Color "2E75B6")
+Append-Element (New-WordParagraph ("La estrategia 'strategy/matrix' permite definir combinaciones din" + [char]0x00E1 + "micas de ejecuci" + [char]0x00F3 + "n para validar m" + [char]0x00FA + "ltiples entornos. En este pipeline, configuramos los siguientes par" + [char]0x00E1 + "metros:") -Italic $true)
 Append-Element (New-WordParagraph "- Sistemas Operativos (os): ubuntu-latest, windows-latest (2 opciones)" -Style "Normal")
 Append-Element (New-WordParagraph "- Versiones de Node.js (node-version): 18, 20 (2 opciones)" -Style "Normal")
-Append-Element (New-WordParagraph "- Modos de Compilacion (mode): debug, release (2 opciones)" -Style "Normal")
-Append-Element (New-WordParagraph "Calculo Inicial (Sin Exclusiones):" -Bold $true)
-Append-Element (New-WordParagraph "La expansion cartesiana total generaria: 2 (OS) * 2 (Node) * 2 (Modo) = 8 combinaciones (8 jobs de ejecucion)." -Style "Normal")
-Append-Element (New-WordParagraph "Estrategia de Exclusion Aplicada (Parte 2):" -Bold $true)
-Append-Element (New-WordParagraph "Excluimos especificamente las configuraciones de Windows en modo debug (windows-latest + debug). Esto se debe a que los builds de depuracion (debug) son muy especificos del desarrollo primario y se validan en profundidad en el entorno Linux (Ubuntu). Excluir Windows debug nos ahorra hasta un 25% de minutos de ejecucion en runners virtuales de Windows (que son computacionalmente mas caros)." -Style "Normal")
-Append-Element (New-WordParagraph "Esta exclusion elimina las siguientes 2 combinaciones:" -Style "Normal")
+Append-Element (New-WordParagraph ("- Modos de Compilaci" + [char]0x00F3 + "n (mode): debug, release (2 opciones)") -Style "Normal")
+Append-Element (New-WordParagraph ("C" + [char]0x00E1 + "lculo Inicial (Sin Exclusiones):") -Bold $true)
+Append-Element (New-WordParagraph ("La expansi" + [char]0x00F3 + "n cartesiana total generar" + [char]0x00ED + "a: 2 (OS) * 2 (Node) * 2 (Modo) = 8 combinaciones (8 jobs de ejecuci" + [char]0x00F3 + "n).") -Style "Normal")
+Append-Element (New-WordParagraph ("Estrategia de Exclusi" + [char]0x00F3 + "n Aplicada (Parte 2):") -Bold $true)
+Append-Element (New-WordParagraph ("Excluimos espec" + [char]0x00ED + "ficamente las configuraciones de Windows en modo debug (windows-latest + debug). Esto se debe a que los builds de depuraci" + [char]0x00F3 + "n (debug) son muy espec" + [char]0x00ED + "ficos del desarrollo primario y se validan en profundidad en el entorno Linux (Ubuntu). Excluir Windows debug nos ahorra hasta un 25% de minutos de ejecuci" + [char]0x00F3 + "n en runners virtuales de Windows (que son computacionalmente m" + [char]0x00E1 + "s caros).") -Style "Normal")
+Append-Element (New-WordParagraph ("Esta exclusi" + [char]0x00F3 + "n elimina las siguientes 2 combinaciones:") -Style "Normal")
 Append-Element (New-WordParagraph "  - windows-latest + Node 18 + debug" -Italic $true)
 Append-Element (New-WordParagraph "  - windows-latest + Node 20 + debug" -Italic $true)
-Append-Element (New-WordParagraph "Total de Jobs Reales en Ejecucion: 8 (iniciales) - 2 (excluidos) = 6 jobs." -Bold $true -Color "C00000")
+Append-Element (New-WordParagraph ("Total de Jobs Reales en Ejecuci" + [char]0x00F3 + "n: 8 (iniciales) - 2 (excluidos) = 6 jobs.") -Bold $true -Color "C00000")
 Append-Element (New-WordParagraph "" -Style "Normal")
 
 # SECTION 2
-Append-Element (New-WordParagraph "2. Inclusiones (Includes) y Variables de Entorno de Produccion" -Bold $true -Color "2E75B6")
-Append-Element (New-WordParagraph "Para agregar configuraciones especiales sin expandir la matriz cartesiana de forma redundante, se utilizo la seccion 'include'. Se configuraron las siguientes optimizaciones:" -Style "Normal")
-Append-Element (New-WordParagraph "- Configuracion Especial de Produccion: Para el entorno de Ubuntu con Node 20 en modo release (nuestro objetivo oficial de produccion), inyectamos variables adicionales:" -Style "Normal")
+Append-Element (New-WordParagraph ("2. Inclusiones (Includes) y Variables de Entorno de Producci" + [char]0x00F3 + "n") -Bold $true -Color "2E75B6")
+Append-Element (New-WordParagraph ("Para agregar configuraciones especiales sin expandir la matriz cartesiana de forma redundante, se utiliz" + [char]0x00F3 + " la secci" + [char]0x00F3 + "n 'include'. Se configuraron las siguientes optimizaciones:") -Style "Normal")
+Append-Element (New-WordParagraph ("- Configuraci" + [char]0x00F3 + "n Especial de Producci" + [char]0x00F3 + "n: Para el entorno de Ubuntu con Node 20 en modo release (nuestro objetivo oficial de producci" + [char]0x00F3 + "n), inyectamos variables adicionales:") -Style "Normal")
 Append-Element (New-WordParagraph "  - production: true (Booleano para activar optimizaciones)" -Style "Normal")
 Append-Element (New-WordParagraph "  - deploy-target: production-cloud (Ruta del despliegue final)" -Style "Normal")
-Append-Element (New-WordParagraph "  - extra-flags: --optimize-all --minify (Parametros para minificar y optimizar el build)" -Style "Normal")
-Append-Element (New-WordParagraph "- Optimizaciones Generales de Release: Para el resto de combinaciones en modo 'release' (Ubuntu Node 18 y Windows Node 20), definimos un valor de compilacion por defecto:" -Style "Normal")
+Append-Element (New-WordParagraph ("  - extra-flags: --optimize-all --minify (Par" + [char]0x00E1 + "metros para minificar y optimizar el build)") -Style "Normal")
+Append-Element (New-WordParagraph ("- Optimizaciones Generales de Release: Para el resto de combinaciones en modo 'release' (Ubuntu Node 18 y Windows Node 20), definimos un valor de compilaci" + [char]0x00F3 + "n por defecto:") -Style "Normal")
 Append-Element (New-WordParagraph "  - extra-flags: --optimize" -Style "Normal")
 Append-Element (New-WordParagraph "" -Style "Normal")
 
 # SECTION 3
 Append-Element (New-WordParagraph "3. Concurrencia y Resiliencia (Fail-Fast)" -Bold $true -Color "2E75B6")
-Append-Element (New-WordParagraph "- Concurrencia: Agregamos un bloque 'concurrency' con 'cancel-in-progress: true' basado en la rama actual. Si realizas un push y el pipeline anterior en esa misma rama aun esta ejecutandose, GitHub Actions cancela inmediatamente el pipeline anterior. Esto evita la acumulacion de ejecuciones obsoletas y optimiza el uso de recursos." -Style "Normal")
-Append-Element (New-WordParagraph "- Resiliencia con Fail-Fast: Se configuro 'fail-fast: false' bajo la estrategia. De forma predeterminada, si un job de la matriz falla, GitHub cancela todos los demas. Al desactivarlo, permitimos que si el build de Node 18 falla por compatibilidad, los de mas jobs (ej. Node 20 en Ubuntu o Windows) continuen hasta completarse. Asi, el equipo de ingenieria obtiene una radiografia completa de todo el ecosistema en cada ejecucion." -Style "Normal")
+Append-Element (New-WordParagraph ("- Concurrencia: Agregamos un bloque 'concurrency' con 'cancel-in-progress: true' basado en la rama actual. Si realizas un push y el pipeline anterior en esa misma rama aun est" + [char]0x00E1 + " ejecut" + [char]0x00E1 + "ndose, GitHub Actions cancela inmediatamente el pipeline anterior. Esto evita la acumulaci" + [char]0x00F3 + "n de ejecuciones obsoletas y optimiza el uso de recursos.") -Style "Normal")
+Append-Element (New-WordParagraph ("- Resiliencia con Fail-Fast: Se configur" + [char]0x00F3 + " 'fail-fast: false' bajo la estrategia. De forma predeterminada, si un job de la matriz falla, GitHub cancela todos los dem" + [char]0x00E1 + "s. Al desactivarlo, permitimos que si el build de Node 18 falla por compatibilidad, los dem" + [char]0x00E1 + "s jobs (ej. Node 20 en Ubuntu o Windows) contin" + [char]0x00FA + "en hasta completarse. As" + [char]0x00ED + ", el equipo de ingenier" + [char]0x00ED + "a obtiene una radiograf" + [char]0x00ED + "a completa de todo el ecosistema en cada ejecuci" + [char]0x00F3 + "n.") -Style "Normal")
 Append-Element (New-WordParagraph "" -Style "Normal")
 
 # SECTION 4
-Append-Element (New-WordParagraph "4. Job Summary Dinamico (Markdown)" -Bold $true -Color "2E75B6")
-Append-Element (New-WordParagraph "En lugar de resumenes de texto plano, implementamos un paso en bash que escribe un informe Markdown completo en la variable especial '$GITHUB_STEP_SUMMARY'. El resumen incluye:" -Style "Normal")
-Append-Element (New-WordParagraph "- Tabla Informativa: Indica el OS ejecutor, version runtime de Node, modo del build, estado final (Success/Failed) y el tiempo estimado del runner (1m 15s para Ubuntu, 2m 30s para Windows)." -Style "Normal")
-Append-Element (New-WordParagraph "- Bloques de Advertencia Enriquecidos (GitHub Alerts): Si se detecta un build de produccion (Ubuntu, Node 20, release), se genera un cuadro dinamico de tipo 'IMPORTANT' con el destino del despliegue en la nube. Si es release normal, muestra una nota informativa ('NOTE'). Si es debug, muestra un consejo tecnico ('TIP')." -Style "Normal")
+Append-Element (New-WordParagraph ("4. Job Summary Din" + [char]0x00E1 + "mico (Markdown)") -Bold $true -Color "2E75B6")
+Append-Element (New-WordParagraph ("En lugar de res" + [char]0x00FA + "menes de texto plano, implementamos un paso en bash que escribe un informe Markdown completo en la variable especial '$GITHUB_STEP_SUMMARY'. El resumen incluye:") -Style "Normal")
+Append-Element (New-WordParagraph ("- Tabla Informativa: Indica el OS ejecutor, versi" + [char]0x00F3 + "n runtime de Node, modo del build, estado final (Success/Failed) y el tiempo estimado del runner (1m 15s para Ubuntu, 2m 30s para Windows).") -Style "Normal")
+Append-Element (New-WordParagraph ("- Bloques de Advertencia Enriquecidos (GitHub Alerts): Si se detecta un build de producci" + [char]0x00F3 + "n (Ubuntu, Node 20, release), se genera un cuadro din" + [char]0x00E1 + "mico de tipo 'IMPORTANT' con el destino del despliegue en la nube. Si es release normal, muestra una nota informativa ('NOTE'). Si es debug, muestra un consejo t" + [char]0x00E9 + "cnico ('TIP').") -Style "Normal")
 Append-Element (New-WordParagraph "" -Style "Normal")
 
 # SECTION 5
-Append-Element (New-WordParagraph "5. Guia de Capturas de Pantalla Requeridas" -Bold $true -Color "2E75B6")
+Append-Element (New-WordParagraph ("5. Gu" + [char]0x00ED + "a de Capturas de Pantalla Requeridas") -Bold $true -Color "2E75B6")
 Append-Element (New-WordParagraph "Para completar tu entrega escolar o empresarial, debes realizar las siguientes capturas en la interfaz de tu GitHub:" -Italic $true)
-Append-Element (New-WordParagraph "- Captura 1 - Ejecucion de la Matriz (6 Jobs):" -Bold $true)
-Append-Element (New-WordParagraph "  - Ubicacion: Ve a la pestaña 'Actions' de tu repositorio en GitHub y selecciona la ultima ejecucion del pipeline." -Style "Normal")
-Append-Element (New-WordParagraph "  - Que capturar: Toma una captura de pantalla del flujo de trabajo donde se visualice claramente que se han creado exactamente 6 jobs paralelos con los nombres expandidos dinamicamente:" -Style "Normal")
+Append-Element (New-WordParagraph ("- Captura 1 - Ejecuci" + [char]0x00F3 + "n de la Matriz (6 Jobs):") -Bold $true)
+Append-Element (New-WordParagraph ("  - Ubicaci" + [char]0x00F3 + "n: Ve a la pesta" + [char]0x00F1 + "a 'Actions' de tu repositorio en GitHub y selecciona la " + [char]0x00FA + "ltima ejecuci" + [char]0x00F3 + "n del pipeline.") -Style "Normal")
+Append-Element (New-WordParagraph ("  - Qu" + [char]0x00E9 + " capturar: Toma una captura de pantalla del flujo de trabajo donde se visualice claramente que se han creado exactamente 6 jobs paralelos con los nombres expandidos din" + [char]0x00E1 + "micamente:") -Style "Normal")
 Append-Element (New-WordParagraph "    1. Build and Test (ubuntu-latest | Node 18 | debug)" -Style "Normal")
 Append-Element (New-WordParagraph "    2. Build and Test (ubuntu-latest | Node 18 | release)" -Style "Normal")
 Append-Element (New-WordParagraph "    3. Build and Test (ubuntu-latest | Node 20 | debug)" -Style "Normal")
 Append-Element (New-WordParagraph "    4. Build and Test (ubuntu-latest | Node 20 | release)" -Style "Normal")
 Append-Element (New-WordParagraph "    5. Build and Test (windows-latest | Node 18 | release)" -Style "Normal")
 Append-Element (New-WordParagraph "    6. Build and Test (windows-latest | Node 20 | release)" -Style "Normal")
-Append-Element (New-WordParagraph "- Captura 2 - Resumen del Job (Job Summary):" -Bold $true)
-Append-Element (New-WordParagraph "  - Ubicacion: Dentro de la misma ejecucion en la pestaña 'Actions', haz clic en el boton 'Summary' en la esquina superior izquierda." -Style "Normal")
-Append-Element (New-WordParagraph "  - Que capturar: Desplazate hacia abajo hasta la seccion del Job Summary. Captura la hermosa tabla generada dinamicamente y el cuadro informativo (Alert) de color que cambia dinamicamente segun la version y modo ejecutado." -Style "Normal")
+Append-Element (New-WordParagraph ("- Captura 2 - Resumen del Job (Job Summary):") -Bold $true)
+Append-Element (New-WordParagraph ("  - Ubicaci" + [char]0x00F3 + "n: Dentro de la misma ejecuci" + [char]0x00F3 + "n en la pesta" + [char]0x00F1 + "a 'Actions', haz clic en el bot" + [char]0x00F3 + "n 'Summary' en la esquina superior izquierda.") -Style "Normal")
+Append-Element (New-WordParagraph ("  - Qu" + [char]0x00E9 + " capturar: Despl" + [char]0x00E1 + "zate hacia abajo hasta la secci" + [char]0x00F3 + "n del Job Summary. Captura la hermosa tabla generada din" + [char]0x00E1 + "micamente y el cuadro informativo (Alert) de color que cambia din" + [char]0x00E1 + "micamente seg" + [char]0x00FA + "n la versi" + [char]0x00F3 + "n y modo ejecutado.") -Style "Normal")
 Append-Element (New-WordParagraph "" -Style "Normal")
 Append-Element (New-WordParagraph "----------------------------------------" -Bold $true)
-Append-Element (New-WordParagraph "Documentacion autogenerada por Antigravity AI Coding Assistant el $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')" -Italic $true)
+Append-Element (New-WordParagraph ("Documentaci" + [char]0x00F3 + "n autogenerada por Antigravity AI Coding Assistant el " + (Get-Date -Format "dd/MM/yyyy HH:mm:ss")) -Italic $true)
 
-# Step 5: Save and zip back
+# Step 6: Save and zip back
 $doc.Save($xmlPath)
 Write-Output "Saved modified XML file. Repackaging zip file into .docx..."
 
@@ -194,7 +236,7 @@ Compress-Archive -Path "$tempExtractDir\*" -DestinationPath $tempZip -Force
 # Replace original docx with the newly generated zip file
 Copy-Item $tempZip -Destination $originalDoc -Force
 
-# Step 6: Cleanup
+# Step 7: Cleanup
 Remove-Item $tempZip -Force
 Remove-Item $tempExtractDir -Recurse -Force
 
