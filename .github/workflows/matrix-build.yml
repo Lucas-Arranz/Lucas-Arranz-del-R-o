@@ -70,12 +70,14 @@ jobs:
           echo "DEPLOY_TARGET=${DEPLOY_TARGET:-'local-testing'}" >> $GITHUB_ENV
 
       - name: Install Dependencies
+        shell: bash
         run: |
           # Simulating installing dependencies (empty package.json setup or dry-run)
           echo "Running dependency installation..."
           echo "npm ci --prefer-offline --no-audit || echo 'No package.json found, skipping npm ci'"
 
       - name: Build Application
+        shell: bash
         run: |
           echo "Building application on ${{ matrix.os }} with Node ${{ matrix.node-version }}..."
           echo "Mode: ${{ matrix.mode }}"
@@ -92,6 +94,7 @@ jobs:
           echo "Build completed successfully!"
 
       - name: Run Tests & Verification
+        shell: bash
         run: |
           echo "Executing test suite..."
           echo "Running unit tests: npm test || echo 'No tests defined, skipping'"
